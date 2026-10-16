@@ -1,24 +1,37 @@
 """IT Helpdesk Ticket Allocation and Management System."""
 
 import json
+import os
+import re
+import shutil
 import subprocess
+import sys
 from datetime import datetime
 
 # Global state
 tickets = {}
 TICKET_COUNTER = 100
-ADMIN_PASSWORD = "helpdesk@123"
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "helpdesk@123")
 
 def raise_ticket(user, issue_type, urgency="3", audit_trail=None):
     """Raise a new ticket, assign an ID, and log an audit trail entry."""
     global TICKET_COUNTER
     if audit_trail is None:
         audit_trail = []
+
+    try:
+        priority = int(urgency)
+    except (ValueError, TypeError):
+        priority = 3
+
+    if priority < 1 or priority > 5:
+        priority = max(1, min(5, priority))
+
     TICKET_COUNTER += 1
     tickets[TICKET_COUNTER] = {
         "user": user,
         "issue": issue_type,
-        "priority": int(urgency),
+        "priority": priority,
         "tech": None,
         "notes": []
     }
@@ -27,18 +40,17 @@ def raise_ticket(user, issue_type, urgency="3", audit_trail=None):
 
 def assign_ticket(ticket_id, technician):
     """Assign an existing ticket to a technician."""
-    tickets[ticket_id]["tech"] = technician
+    if ticket_id in tickets:
+        tickets[ticket_id]["tech"] = technician
 
 def add_note(ticket_id, note):
     """Append a progress note to an existing ticket."""
-    try:
+    if ticket_id in tickets:
         tickets[ticket_id]["notes"].append(note)
-    except:
-        pass
 
 def close_ticket(ticket_id, password):
     """Close and remove a ticket if authorized by the admin password."""
-    if password == ADMIN_PASSWORD:
+    if password == ADMIN_PASSWORD and ticket_id in tickets:
         del tickets[ticket_id]
 
 def unresolved_high_priority():
@@ -50,8 +62,14 @@ def unresolved_high_priority():
     return result
 
 def ping_user_machine(hostname):
-    """Ping a user machine to verify network reachability."""
-    return subprocess.call("ping -c 1 " + hostname, shell=True)
+    """Ping a user machine securely using subprocess without shell."""
+    if not isinstance(hostname, str) or not re.match(r"^[a-zA-Z0-9.-]+$", hostname):
+        raise ValueError(f"Invalid hostname: {hostname}")
+
+    ping_bin = shutil.which("ping") or "ping"
+    count_flag = "-n" if sys.platform.startswith("win") else "-c"
+    res = subprocess.run([ping_bin, count_flag, "1", hostname], check=False)
+    return res.returncode
 
 def save_tickets(file="tickets.json"):
     """Persist tickets dictionary to a JSON file."""
@@ -68,7 +86,7 @@ def main():
     print("Unassigned high priority:", unresolved_high_priority())
     level = input("Urgency for a new laptop ticket (1-5, Enter for 3): ") or "3"
     raise_ticket("sana", "laptop", level)
-    close_ticket(t3, "helpdesk@123")
+    close_ticket(t3, ADMIN_PASSWORD)
     save_tickets()
     print("Open tickets:", list(tickets.keys()))
 
