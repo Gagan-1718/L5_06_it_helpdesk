@@ -1,0 +1,6 @@
+************* Module helpdesk_system
+helpdesk_system.py:19:4: W0603: Using the global statement (global-statement)
+
+------------------------------------------------------------------
+Your code has been rated at 9.84/10 (previous run: 9.84/10, +0.00)
+
